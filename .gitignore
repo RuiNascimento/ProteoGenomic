@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Knit files
+*.html
+*.pdf
+
+# Data
+*.xlsx
+*.tsv
+*.csv

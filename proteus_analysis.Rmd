@@ -1,0 +1,226 @@
+---
+title: "Prometeus MaxQuanta Data Analisys"
+author: "Rui Nascimento"
+date: "`r format(Sys.time(), '%d %B, %Y (%X)')`"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Vitis Proteome Analysis
+
+Repository of code for Data Analysis of MaxQuant results of LC-MS/MS material.
+
+Using [Proteus](https://github.com/bartongroup/Proteus) R package.
+
+### The data:
+
+* _Vitis vinifera_ leaf Proteome.
+* `Control` and `Inoculated` with _P. viticola_.
+* At 3 time points, 6, 12 and 24 hpi.
+
+# Prometeus Pipeline
+
+### Disclamer
+
+I will be trying to use the Proteus pipeline using just the `protein groups file` (without the Evidence file), it will be missing peptide information for sure and maybe some other relevant information.
+
+## Load required libraries
+
+```{r libraryLoad, warning=FALSE}
+library(limma)
+library(proteus)
+```
+
+## Metadata object
+
+Create a metadata object consistent with our dataset
+
+```{r}
+metadataFile <- "metadata.csv"
+meta <- read.delim(metadataFile, header=TRUE, sep=",")
+meta
+```
+
+## Read the protein groups file
+
+```{r}
+proteinGroupsFile <- "Vitis_Protein_Groups.tsv"
+prot.MQ <- readProteinGroups(proteinGroupsFile, meta)
+```
+
+## Data Normalization
+
+Normalize datasets.
+
+```{r}
+prot.MQ.med <- normalizeData(prot.MQ)
+prot.MQ.quant <- normalizeData(prot.MQ, norm.fun=limma::normalizeQuantiles)
+```
+
+```{r}
+plotSampleDistributions(prot.MQ, title="Not normalized", fill="condition", method="violin")
+
+plotSampleDistributions(prot.MQ.med, title="Median normalization", fill="condition", method="violin")
+
+plotSampleDistributions(prot.MQ.quant, title="Quantile normalization", fill="condition", method="violin")
+```
+
+The best method looks like the quantile normalization and will be used for the rest of the analysis.
+
+## Differential expression at 6hpi
+
+```{r}
+res.6hpi <- limmaDE(prot.MQ.quant, sig.level=0.05, conditions = c("Ri6h", "Rm6h"))
+```
+
+### List of significantly differentially accomulated proteins at 6hpi
+
+(Only showing the first 5 for space constrains)
+```{r}
+head(res.6hpi[which(res.6hpi$significant), c("protein", "logFC", "adj.P.Val")])
+```
+
+
+### Proteins in only one condition
+
+* Proteins only in Inoculated leafs
+```{r}
+only.Ri6h <- which(prot.MQ.quant$detect$`Ri6h` & !prot.MQ.quant$detect$Rm6h)
+#as.character(prot.MQ.quant$proteins[only.Ri6h])
+```
+There were detected `r length(only.Ri6h)` proteins in at least 1 replicate in Inoculated samples but not detected in Mock samples.
+
+
+* Proteins only in Mock leafs
+```{r}
+only.Rm6h <- which(!prot.MQ.quant$detect$`Ri6h` & prot.MQ.quant$detect$Rm6h)
+# as.character(prot.MQ.quant$proteins[only.Rm6h])
+```
+
+There were detected `r length(only.Rm6h)` proteins in at least 1 replicate in Mock samples but not detected in Inoculated samples.
+
+### Data Visualization
+
+```{r}
+plotFID(prot.MQ.quant, pair = c("Ri6h", "Rm6h"))
+```
+
+```{r}
+plotVolcano(res.6hpi)
+```
+
+```{r}
+plotPdist(res.6hpi)
+```
+
+
+## Differential expression at 12hpi
+
+```{r}
+res.12hpi <- limmaDE(prot.MQ.quant, sig.level=0.05, conditions = c("Ri12h", "Rm12h"))
+```
+
+### List of significantly differentially accomulated proteins at 12hpi
+
+(Only showing the first 5 for space constrains)
+```{r}
+head(res.12hpi[which(res.12hpi$significant), c("protein", "logFC", "adj.P.Val")])
+```
+
+
+### Proteins in only one condition
+
+* Proteins only in Inoculated leafs
+```{r}
+only.Ri12h <- which(prot.MQ.quant$detect$`Ri12h` & !prot.MQ.quant$detect$Rm12h)
+#as.character(prot.MQ.quant$proteins[only.Ri12h])
+```
+There were detected `r length(only.Ri12h)` proteins in at least 1 replicate in Inoculated samples but not detected in Mock samples.
+
+
+* Proteins only in Mock leafs
+```{r}
+only.Rm12h <- which(!prot.MQ.quant$detect$`Ri12h` & prot.MQ.quant$detect$Rm12h)
+# as.character(prot.MQ.quant$proteins[only.Rm12h])
+```
+
+There were detected `r length(only.Rm12h)` proteins in at least 1 replicate in Mock samples but not detected in Inoculated samples.
+
+### Data Visualization
+
+```{r}
+plotFID(prot.MQ.quant, pair = c("Ri12h", "Rm12h"))
+```
+
+```{r}
+plotVolcano(res.12hpi)
+```
+
+```{r}
+plotPdist(res.12hpi)
+```
+
+
+## Differential expression at 24hpi
+
+```{r}
+res.24hpi <- limmaDE(prot.MQ.quant, sig.level=0.05, conditions = c("Ri24h", "Rm24h"))
+```
+
+### List of significantly differentially accomulated proteins at 24hpi
+
+(Only showing the first 5 for space constrains)
+```{r}
+head(res.24hpi[which(res.24hpi$significant), c("protein", "logFC", "adj.P.Val")])
+```
+
+
+### Proteins in only one condition
+
+* Proteins only in Inoculated leafs
+```{r}
+only.Ri24h <- which(prot.MQ.quant$detect$`Ri24h` & !prot.MQ.quant$detect$Rm24h)
+#as.character(prot.MQ.quant$proteins[only.Ri24h])
+```
+There were detected `r length(only.Ri24h)` proteins in at least 1 replicate in Inoculated samples but not detected in Mock samples.
+
+
+* Proteins only in Mock leafs
+```{r}
+only.Rm24h <- which(!prot.MQ.quant$detect$`Ri24h` & prot.MQ.quant$detect$Rm24h)
+# as.character(prot.MQ.quant$proteins[only.Rm24h])
+```
+
+There were detected `r length(only.Rm24h)` proteins in at least 1 replicate in Mock samples but not detected in Inoculated samples.
+
+### Data Visualization
+
+```{r}
+plotFID(prot.MQ.quant, pair = c("Ri24h", "Rm24h"))
+```
+
+```{r}
+plotVolcano(res.24hpi)
+```
+
+```{r}
+plotPdist(res.24hpi)
+```
+
+I can also plot the results for individual proteins and peptides with the Evidence file...
+
+And also Interactive Plots locally.
+
+
+Save results to file:
+```{r}
+write.table(res.6hpi, "6hpi_DE_output.tsv", sep = "\t", row.names = FALSE)
+write.table(res.12hpi, "12hpi_DE_output.tsv", sep = "\t", row.names = FALSE)
+write.table(res.24hpi, "24hpi_DE_output.tsv", sep = "\t", row.names = FALSE)
+```
+
