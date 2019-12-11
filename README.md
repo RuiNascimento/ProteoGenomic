@@ -1,6 +1,6 @@
-# Vitis Proteome Analysis
+# _Vitis vinifera_ Proteome Analysis
 
-Repository of code for Data Analysis of MaxQuant results of LC-MS/MS material.
+Repository of code for the Data Analysis of MaxQuant results, generated from a untargeted LC-MS/MS aproach.
 
 Using [Proteus](https://github.com/bartongroup/Proteus) R package.
 
