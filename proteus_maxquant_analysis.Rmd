@@ -1,0 +1,145 @@
+---
+title: "Proteus MaxQuant Data Analisys"
+author: "Rui Nascimento"
+date: "`r format(Sys.time(), '%d %B, %Y (%X)')`"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Vitis Proteome Analysis
+
+Repository of code for Data Analysis of MaxQuant results of LC-MS/MS material.
+
+Using [Proteus](https://github.com/bartongroup/Proteus) R package.
+
+### The data:
+
+* _Vitis vinifera_ leaf Proteome.
+* `Control` and `Inoculated` with _P. viticola_.
+* At 3 time points, 6, 12 and 24 hpi.
+
+# Proteus Pipeline
+
+## Load required libraries
+
+```{r libraryLoad, warning=FALSE}
+library(limma)
+library(proteus)
+```
+
+## Load Metadata object
+
+Create a metadata object consistent with our dataset
+
+```{r}
+metadataFile <- "metadata.csv"
+meta <- read.delim(metadataFile, header=TRUE, sep=",")
+meta
+```
+
+## Read evidence file
+
+```{r}
+evidenceFile <- "evidence.txt"
+evi <- readEvidenceFile(evidenceFile)
+head(evi)
+```
+
+## Peptide Data
+
+```{r}
+pepdat <- makePeptideTable(evi, meta)
+pepdat$tab[1:5, 1:18]
+summary(pepdat)
+```
+
+
+## Number of peptides
+
+```{r}
+plotCount(pepdat)
+```
+
+## Jaccard similarity
+
+```{r}
+plotDetectionSimilarity(pepdat, bin.size = 0.02)
+```
+
+## Clustering
+
+```{r}
+plotClustering(pepdat)
+```
+
+## Protein Data
+
+Create the protein dataset
+
+```{r}
+prodat <- makeProteinTable(pepdat)
+summary(prodat)
+```
+
+## Normalization
+
+Non normalized samples
+
+```{r}
+plotSampleDistributions(prodat, title="Not normalized", fill="condition", method="violin")
+```
+
+Median Normalized Samples
+```{r}
+prodat.med <- normalizeData(prodat)
+plotSampleDistributions(prodat.med, title="Median normalization", fill="condition", method="violin")
+```
+
+Quantile Normalized Samples
+```{r}
+prodat.quant <- normalizeData(prodat, norm.fun=limma::normalizeQuantiles)
+plotSampleDistributions(prodat.quant, title="Quantile normalization", fill="condition", method="violin")
+```
+
+## Clustering
+
+```{r}
+plotClustering(prodat.quant)
+```
+
+## MDS Plot of normalized data
+
+```{r}
+plotMDS(prodat.quant$tab, col = as.numeric(factor(meta$condition)), labels = meta$condition)
+```
+
+## Read Maxquant Protein groups
+
+```{r}
+proteinGroupsFile <- "Vitis_Protein_Groups.tsv"
+prot.MQ <- readProteinGroups(proteinGroupsFile, meta)
+```
+
+
+## Limma DE analysis
+
+```{r}
+res6 <- limmaDE(prodat.med, sig.level=0.05, conditions = c("Ri6h", "Rm6h"))
+subset(res6, significant == "TRUE")
+```
+
+```{r}
+res12 <- limmaDE(prodat.med, sig.level=0.05, conditions = c("Ri12h", "Rm12h"))
+subset(res12, significant == "TRUE")
+```
+
+
+```{r}
+res24 <- limmaDE(prodat.med, sig.level=0.05, conditions = c("Ri24h", "Rm24h"))
+subset(res24, significant == "TRUE")
+```
