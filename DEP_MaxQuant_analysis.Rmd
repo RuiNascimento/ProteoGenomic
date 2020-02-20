@@ -58,16 +58,28 @@ get1GI <- function(x){
   return(gi)
 }
 
-protein2gene <- function(x, api_key = api_key){
+protein2gene <- function(x, api_key = NULL){
+  if (is.null(api_key)) {
+  gene_gi <- entrez_link(dbfrom="protein", db="gene", id = x)$links$protein_gene[1]
+  } else {
   gene_gi <- entrez_link(dbfrom="protein", db="gene", id = x, api_key = api_key)$links$protein_gene[1]
+  }
   if (is.null(gene_gi)){gene_gi <- ""}
   return(gene_gi[[1]])
 }
-```
 
-Get protein names
-```{r}
+# Get protein ID Name
+proteinName <- function(x, api_key = NULL){
+  if (is.null(api_key)) {
+  protName <- entrez_summary(db = "protein", id = x)$title
+  } else {
+  protName <- entrez_summary(db = "protein", id = x, api_key = api_key)$title
+  }
+  if (is.null(protName)){protName <- ""}
+  return(protName)
+}
 
+# Get all names
 get_names <- function(prot_ids) {
   gi <- getGI(prot_ids)
   name <-  lapply(gi, function(id) (entrez_summary(id = id, db = "protein")$title))
@@ -90,9 +102,12 @@ data_unique <- make_unique(data, names = "name", ids = "ID", delim = ";")
 
 
 ## Generate a SummarizedExperiment object using an experimental design
+
+Choose 6 and 12 hpi timepoints
+
 ```{r}
-LFQ_columns <- grep("Intensity.", colnames(data)) # get LFQ column numbers
-experimental_design <- read.delim("ExperimentalDesign.tsv", header=TRUE, sep="\t", stringsAsFactors = FALSE)
+LFQ_columns <- grep("Intensity\\.R(m|i)(6|12)", colnames(data)) # get LFQ column numbers
+experimental_design <- read.delim("ExperimentalDesign_no24.csv", header=TRUE, sep="\t", stringsAsFactors = FALSE)
 data_se <- make_se(data, LFQ_columns, experimental_design)
 ```
 
@@ -164,11 +179,11 @@ plot_imputation(data_norm, data_imp)
 
 ```{r}
 data_diff_manual <- test_diff(data_imp, type = "manual", 
-                              test = c("Ri6h_vs_Rm6h", "Ri12h_vs_Rm12h", "Ri24h_vs_Rm24h"))
+                              test = c("Ri6h_vs_Rm6h", "Ri12h_vs_Rm12h"))
 ```
 
 ```{r}
-dep <- add_rejections(data_diff_manual, alpha = 0.1, lfc = log2(1.5))
+dep <- add_rejections(data_diff_manual, alpha = 1, lfc = log2(1.5))
 ```
   
 ## Results Table
@@ -186,6 +201,7 @@ Get Gene IDs from Protein IDs from NCBI servers
 ```{r}
 api_key <- readLines("~/.ncbi_api")
 data_results$GENE_GI <- sapply(data_results$ID, protein2gene, api_key = api_key, simplify = TRUE, USE.NAMES = FALSE)
+data_results$PROTEIN_NAME <- sapply(data_results$ID, proteinName, api_key = api_key, simplify = TRUE, USE.NAMES = FALSE)
 ```
 
 
@@ -198,7 +214,7 @@ plot_pca(dep, x = 1, y = 2, n = 500, point_size = 4)
 ### PCA
 
 ```{r}
-plot_pca(dep[, c(7,8,9,16,17,18)], x = 1, y = 2, n = 500, point_size = 4)
+plot_pca(dep[, c(4,5,6,10,11,12)], x = 1, y = 2, n = 500, point_size = 4)
 
 ```
 
@@ -207,7 +223,7 @@ plot_pca(dep[, c(7,8,9,16,17,18)], x = 1, y = 2, n = 500, point_size = 4)
 Genererate genelist of differentially accomulated proteins using the Gene IDs
 
 ```{r}
-geneList6h <- data_results$Ri6h_vs_Rm6h_p.adj
+geneList6h <- data_results$Ri6h_vs_Rm6h_p.val
 names(geneList6h) <- data_results$GENE_GI
 head(geneList6h)
 ```
@@ -218,7 +234,7 @@ Run the Go enrichment tests
 GOdata6h <- new("topGOdata",
               ontology = "BP",
               allGenes = geneList6h,
-              geneSelectionFun = function(x) (x < 0.1),
+              geneSelectionFun = function(x) (x < 0.01),
               annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
               ID = "entrez")
 
@@ -239,13 +255,13 @@ par(cex = 1)
 ## 12 hpi
 
 ```{r}
-plot_pca(dep[, c(1,2,3,10,11,12)], x = 1, y = 2, n = 500, point_size = 4)
+plot_pca(dep[, c(1,2,3,7,8,9)], x = 1, y = 2, n = 500, point_size = 4)
 ```
 
 Genererate genelist of differentially accomulated proteins using the Gene IDs
 
 ```{r}
-geneList12h <- data_results$Ri12h_vs_Rm12h_p.adj
+geneList12h <- data_results$Ri12h_vs_Rm12h_p.val
 names(geneList12h) <- data_results$GENE_GI
 head(geneList12h)
 ```
@@ -256,7 +272,7 @@ Run the Go enrichment tests
 GOdata12h <- new("topGOdata",
                 ontology = "BP",
                 allGenes = geneList12h,
-                geneSelectionFun = function(x) (x < 0.1),
+                geneSelectionFun = function(x) (x < 0.01),
                 annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
                 ID = "entrez")
 
@@ -270,44 +286,6 @@ head(tab12h, 15)
 
 par(cex = 0.6)
 showSigOfNodes(GOdata12h, score(resultKS12h), firstSigNodes = 5, useInfo = "def")
-par(cex = 1)
-```
-
-
-## 24 hpi
-
-```{r}
-plot_pca(dep[, c(4,5,6,13,14,15)], x = 1, y = 2, n = 500, point_size = 4)
-```
-
-Genererate genelist of differentially accomulated proteins using the Gene IDs
-
-```{r}
-geneList24h <- data_results$Ri24h_vs_Rm24h_p.adj
-names(geneList24h) <- data_results$GENE_GI
-head(geneList24h)
-```
-
-Run the Go enrichment tests
-
-```{r}
-GOdata24h <- new("topGOdata",
-                 ontology = "BP",
-                 allGenes = geneList24h,
-                 geneSelectionFun = function(x) (x < 0.1),
-                 annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
-                 ID = "entrez")
-
-resultKS24h <- runTest(GOdata24h, algorithm = "weight01", statistic = "fisher")
-
-tab24h <- GenTable(GOdata24h, raw.p.value = resultKS24h, topNodes = length(resultKS24h@score), numChar = 120)
-# Convert p.value to numeric
-tab24h$raw.p.value <- as.numeric(tab24h$raw.p.value)
-
-head(tab24h, 15)
-
-par(cex = 0.6)
-showSigOfNodes(GOdata24h, score(resultKS24h), firstSigNodes = 5, useInfo = "def")
 par(cex = 1)
 ```
 
@@ -375,10 +353,10 @@ for (x in 1:sum(tab6h$raw.p.value < 0.05)) {
   writeFormula(excel, "Summary", startRow = x+1, 
                x = makeHyperlinkString(sheet = sheetname, row = 1, col = 1
                                        , text = goID))
-  conditionalFormatting(excel, sheetname, cols=18, rows=2:nrow(GoDF[[x]]), rule=upreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=18, rows=2:nrow(GoDF[[x]]), rule=downreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=8, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=11, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=14, rows=2:(nrow(GoDF[[x]])+1), rule=upreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=14, rows=2:(nrow(GoDF[[x]])+1), rule=downreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=7, rows=2:(nrow(GoDF[[x]])+1), rule="<0.01", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=9, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
 }
 
 saveWorkbook(excel, file = fileName, overwrite = TRUE)
@@ -429,64 +407,10 @@ for (x in 1:sum(tab12h$raw.p.value < 0.05)) {
   writeFormula(excel, "Summary", startRow = x+1, 
                x = makeHyperlinkString(sheet = sheetname, row = 1, col = 1
                                        , text = goID))
-  conditionalFormatting(excel, sheetname, cols=16, rows=2:nrow(GoDF[[x]]), rule=upreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=16, rows=2:nrow(GoDF[[x]]), rule=downreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=6, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=9, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
-}
-
-saveWorkbook(excel, file = fileName, overwrite = TRUE)
-```
-
-Save 24hpi GO Results
-
-Create excel workbook to put data in.
-
-```{r}
-fileName <- paste0("results/24hpi_", "go_results.xlsx")
-excel <- createWorkbook()
-```
-
-Create the Summary Page.
-
-```{r}
-addWorksheet(excel, "Summary")
-writeData(tab24h[tab24h$raw.p.value < 0.05, ], wb = excel, sheet = "Summary", rowNames = FALSE)
-```
-
-For loop to generate the diferent dataframes and save to a list.
-
-```{r, warning=FALSE, message=FALSE}
-GoDF <- list()
-for (x in 1:sum(tab24h$raw.p.value < 0.05)) {
-  goID <- tab24h[x, "GO.ID"]
-  ids <- genesInTerm(GOdata24h, goID)
-  annot <- data.table(AnnotationDbi::select(org.Vvinifera.eg.db, keys=ids[[1]], column=c("symbol", "gene_name"), keytype="gene_id"))
-  tmp <- data.table(data_results)
-  expVals <- tmp[GENE_GI %in% annot$gene_id, ]
-  final_annot <- merge.data.table(annot, expVals, by.x ="gene_id", by.y = "GENE_GI")
-  setorder(final_annot, Ri24h_vs_Rm24h_p.adj)
-  GoDF[[goID]] <- final_annot
-}
-```
-
-For loop to add every sheet, every sheet is a GO_ID with a p.value < 0.05.
-Add Hyperlinks to Summary Page.
-Add conditional formating to highligh significant foldchange / p.values.
-
-```{r}
-for (x in 1:sum(tab24h$raw.p.value < 0.05)) {
-  goID <- tab24h[x, "GO.ID"]
-  sheetname <- substring(tab24h[x, "GO.ID"], 4)
-  addWorksheet(excel, sheetname)
-  writeData(GoDF[[x]], wb = excel, sheet = sheetname, rowNames = FALSE)
-  writeFormula(excel, "Summary", startRow = x+1, 
-               x = makeHyperlinkString(sheet = sheetname, row = 1, col = 1
-                                       , text = goID))
-  conditionalFormatting(excel, sheetname, cols=17, rows=2:nrow(GoDF[[x]]), rule=upreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=17, rows=2:nrow(GoDF[[x]]), rule=downreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=7, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=10, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=13, rows=2:(nrow(GoDF[[x]])+1), rule=upreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=13, rows=2:(nrow(GoDF[[x]])+1), rule=downreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=6, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=8, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
 }
 
 saveWorkbook(excel, file = fileName, overwrite = TRUE)
