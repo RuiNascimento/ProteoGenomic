@@ -219,7 +219,7 @@ plot_pca(dep[, c(7,8,9,16,17,18)], x = 1, y = 2, n = 500, point_size = 4)
 Genererate genelist of differentially accomulated proteins using the Gene IDs
 
 ```{r}
-geneList6h <- data_results$Ri6h_vs_Rm6h_p.adj
+geneList6h <- data_results$Ri6h_vs_Rm6h_p.val
 names(geneList6h) <- data_results$GENE_GI
 head(geneList6h)
 ```
@@ -230,7 +230,7 @@ Run the Go enrichment tests
 GOdata6h <- new("topGOdata",
               ontology = "BP",
               allGenes = geneList6h,
-              geneSelectionFun = function(x) (x < 0.1),
+              geneSelectionFun = function(x) (x < 0.05),
               annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
               ID = "entrez")
 
@@ -257,7 +257,7 @@ plot_pca(dep[, c(1,2,3,10,11,12)], x = 1, y = 2, n = 500, point_size = 4)
 Genererate genelist of differentially accomulated proteins using the Gene IDs
 
 ```{r}
-geneList12h <- data_results$Ri12h_vs_Rm12h_p.adj
+geneList12h <- data_results$Ri12h_vs_Rm12h_p.val
 names(geneList12h) <- data_results$GENE_GI
 head(geneList12h)
 ```
@@ -268,7 +268,7 @@ Run the Go enrichment tests
 GOdata12h <- new("topGOdata",
                 ontology = "BP",
                 allGenes = geneList12h,
-                geneSelectionFun = function(x) (x < 0.1),
+                geneSelectionFun = function(x) (x < 0.05),
                 annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
                 ID = "entrez")
 
@@ -295,7 +295,7 @@ plot_pca(dep[, c(4,5,6,13,14,15)], x = 1, y = 2, n = 500, point_size = 4)
 Genererate genelist of differentially accomulated proteins using the Gene IDs
 
 ```{r}
-geneList24h <- data_results$Ri24h_vs_Rm24h_p.adj
+geneList24h <- data_results$Ri24h_vs_Rm24h_p.val
 names(geneList24h) <- data_results$GENE_GI
 head(geneList24h)
 ```
@@ -306,7 +306,7 @@ Run the Go enrichment tests
 GOdata24h <- new("topGOdata",
                  ontology = "BP",
                  allGenes = geneList24h,
-                 geneSelectionFun = function(x) (x < 0.1),
+                 geneSelectionFun = function(x) (x < 0.05),
                  annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
                  ID = "entrez")
 
@@ -389,7 +389,7 @@ for (x in 1:sum(tab6h$raw.p.value < 0.05)) {
                                        , text = goID))
   conditionalFormatting(excel, sheetname, cols=18, rows=2:nrow(GoDF[[x]]), rule=upreg, style = posStyle)
   conditionalFormatting(excel, sheetname, cols=18, rows=2:nrow(GoDF[[x]]), rule=downreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=8, rows=2:nrow(GoDF[[x]]), rule="<0.01", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=8, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
   conditionalFormatting(excel, sheetname, cols=11, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
 }
 
@@ -443,7 +443,7 @@ for (x in 1:sum(tab12h$raw.p.value < 0.05)) {
                                        , text = goID))
   conditionalFormatting(excel, sheetname, cols=16, rows=2:nrow(GoDF[[x]]), rule=upreg, style = posStyle)
   conditionalFormatting(excel, sheetname, cols=16, rows=2:nrow(GoDF[[x]]), rule=downreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=6, rows=2:nrow(GoDF[[x]]), rule="<0.01", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=6, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
   conditionalFormatting(excel, sheetname, cols=9, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
 }
 
@@ -497,7 +497,7 @@ for (x in 1:sum(tab24h$raw.p.value < 0.05)) {
                                        , text = goID))
   conditionalFormatting(excel, sheetname, cols=17, rows=2:nrow(GoDF[[x]]), rule=upreg, style = posStyle)
   conditionalFormatting(excel, sheetname, cols=17, rows=2:nrow(GoDF[[x]]), rule=downreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=7, rows=2:nrow(GoDF[[x]]), rule="<0.01", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=7, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
   conditionalFormatting(excel, sheetname, cols=10, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
 }
 
@@ -516,3 +516,24 @@ write.table(df_long, file = "results_long.tsv", sep = "\t", row.names = FALSE)
 write.table(data_results, "Results.tsv", sep = "\t", row.names = FALSE)
 ```
 
+
+```{r}
+GOdata6h <- new("topGOdata",
+              ontology = "CC",
+              allGenes = geneList6h,
+              geneSelectionFun = function(x) (x < 0.05),
+              annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
+              ID = "entrez")
+
+resultKS6h <- runTest(GOdata6h, algorithm = "weight01", statistic = "fisher")
+
+tab6h <- GenTable(GOdata6h, raw.p.value = resultKS6h, topNodes = length(resultKS6h@score), numChar = 120)
+# Convert p.value to numeric
+tab6h$raw.p.value <- as.numeric(tab6h$raw.p.value)
+
+head(tab6h, 15)
+
+par(cex = 0.6)
+showSigOfNodes(GOdata6h, score(resultKS6h), firstSigNodes = 5, useInfo = "def")
+par(cex = 1)
+```
