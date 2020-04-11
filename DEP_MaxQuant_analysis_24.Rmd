@@ -387,10 +387,10 @@ for (x in 1:sum(tab6h$raw.p.value < 0.05)) {
   writeFormula(excel, "Summary", startRow = x+1, 
                x = makeHyperlinkString(sheet = sheetname, row = 1, col = 1
                                        , text = goID))
-  conditionalFormatting(excel, sheetname, cols=18, rows=2:nrow(GoDF[[x]]), rule=upreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=18, rows=2:nrow(GoDF[[x]]), rule=downreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=8, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=11, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=18, rows=2:(nrow(GoDF[[x]])+1), rule=upreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=18, rows=2:(nrow(GoDF[[x]])+1), rule=downreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=8, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=11, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
 }
 
 saveWorkbook(excel, file = fileName, overwrite = TRUE)
@@ -441,10 +441,10 @@ for (x in 1:sum(tab12h$raw.p.value < 0.05)) {
   writeFormula(excel, "Summary", startRow = x+1, 
                x = makeHyperlinkString(sheet = sheetname, row = 1, col = 1
                                        , text = goID))
-  conditionalFormatting(excel, sheetname, cols=16, rows=2:nrow(GoDF[[x]]), rule=upreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=16, rows=2:nrow(GoDF[[x]]), rule=downreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=6, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=9, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=18, rows=2:(nrow(GoDF[[x]])+1), rule=upreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=18, rows=2:(nrow(GoDF[[x]])+1), rule=downreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=8, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=11, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
 }
 
 saveWorkbook(excel, file = fileName, overwrite = TRUE)
@@ -495,10 +495,10 @@ for (x in 1:sum(tab24h$raw.p.value < 0.05)) {
   writeFormula(excel, "Summary", startRow = x+1, 
                x = makeHyperlinkString(sheet = sheetname, row = 1, col = 1
                                        , text = goID))
-  conditionalFormatting(excel, sheetname, cols=17, rows=2:nrow(GoDF[[x]]), rule=upreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=17, rows=2:nrow(GoDF[[x]]), rule=downreg, style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=7, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
-  conditionalFormatting(excel, sheetname, cols=10, rows=2:nrow(GoDF[[x]]), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=18, rows=2:(nrow(GoDF[[x]])+1), rule=upreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=18, rows=2:(nrow(GoDF[[x]])+1), rule=downreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=8, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=11, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
 }
 
 saveWorkbook(excel, file = fileName, overwrite = TRUE)
@@ -516,10 +516,11 @@ write.table(df_long, file = "results_long.tsv", sep = "\t", row.names = FALSE)
 write.table(data_results, "Results.tsv", sep = "\t", row.names = FALSE)
 ```
 
+Molecular Function
 
 ```{r}
 GOdata6h <- new("topGOdata",
-              ontology = "CC",
+              ontology = "MF",
               allGenes = geneList6h,
               geneSelectionFun = function(x) (x < 0.05),
               annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
@@ -536,4 +537,241 @@ head(tab6h, 15)
 par(cex = 0.6)
 showSigOfNodes(GOdata6h, score(resultKS6h), firstSigNodes = 5, useInfo = "def")
 par(cex = 1)
+```
+
+```{r}
+GOdata12h <- new("topGOdata",
+                ontology = "MF",
+                allGenes = geneList12h,
+                geneSelectionFun = function(x) (x < 0.05),
+                annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
+                ID = "entrez")
+
+resultKS12h <- runTest(GOdata12h, algorithm = "weight01", statistic = "fisher")
+
+tab12h <- GenTable(GOdata12h, raw.p.value = resultKS12h, topNodes = length(resultKS12h@score), numChar = 120)
+# Convert p.value to numeric
+tab12h$raw.p.value <- as.numeric(tab12h$raw.p.value)
+
+head(tab12h, 15)
+
+par(cex = 0.6)
+showSigOfNodes(GOdata12h, score(resultKS12h), firstSigNodes = 5, useInfo = "def")
+par(cex = 1)
+```
+
+Save 6hpi GO Results
+
+Create excel workbook to put data in.
+
+```{r}
+fileName <- paste0("results/6hpi_", "go_results_MF.xlsx")
+excel <- createWorkbook()
+```
+
+Create the Summary Page.
+
+```{r}
+addWorksheet(excel, "Summary")
+writeData(tab6h[tab6h$raw.p.value < 0.05, ], wb = excel, sheet = "Summary", rowNames = FALSE)
+```
+
+For loop to generate the diferent dataframes and save to a list.
+
+```{r, warning=FALSE, message=FALSE}
+GoDF <- list()
+for (x in 1:sum(tab6h$raw.p.value < 0.05)) {
+  goID <- tab6h[x, "GO.ID"]
+  ids <- genesInTerm(GOdata6h, goID)
+  annot <- data.table(AnnotationDbi::select(org.Vvinifera.eg.db, keys=ids[[1]], column=c("symbol", "gene_name"), keytype="gene_id"))
+  tmp <- data.table(data_results)
+  expVals <- tmp[GENE_GI %in% annot$gene_id, ]
+  final_annot <- merge.data.table(annot, expVals, by.x ="gene_id", by.y = "GENE_GI")
+  setorder(final_annot, Ri6h_vs_Rm6h_p.adj)
+  GoDF[[goID]] <- final_annot
+}
+```
+
+For loop to add every sheet, every sheet is a GO_ID with a p.value < 0.05.
+Add Hyperlinks to Summary Page.
+Add conditional formating to highligh significant foldchange / p.values.
+
+```{r}
+for (x in 1:sum(tab6h$raw.p.value < 0.05)) {
+  goID <- tab6h[x, "GO.ID"]
+  sheetname <- substring(tab6h[x, "GO.ID"], 4)
+  addWorksheet(excel, sheetname)
+  writeData(GoDF[[x]], wb = excel, sheet = sheetname, rowNames = FALSE)
+  writeFormula(excel, "Summary", startRow = x+1, 
+               x = makeHyperlinkString(sheet = sheetname, row = 1, col = 1
+                                       , text = goID))
+  conditionalFormatting(excel, sheetname, cols=18, rows=2:(nrow(GoDF[[x]])+1), rule=upreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=18, rows=2:(nrow(GoDF[[x]])+1), rule=downreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=8, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=11, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
+}
+
+saveWorkbook(excel, file = fileName, overwrite = TRUE)
+```
+
+Save 12hpi GO Results
+
+Create excel workbook to put data in.
+
+```{r}
+fileName <- paste0("results/12hpi_", "go_results_MF.xlsx")
+excel <- createWorkbook()
+```
+
+Create the Summary Page.
+
+```{r}
+addWorksheet(excel, "Summary")
+writeData(tab12h[tab12h$raw.p.value < 0.05, ], wb = excel, sheet = "Summary", rowNames = FALSE)
+```
+
+For loop to generate the diferent dataframes and save to a list.
+
+```{r, warning=FALSE, message=FALSE}
+GoDF <- list()
+for (x in 1:sum(tab12h$raw.p.value < 0.05)) {
+  goID <- tab12h[x, "GO.ID"]
+  ids <- genesInTerm(GOdata12h, goID)
+  annot <- data.table(AnnotationDbi::select(org.Vvinifera.eg.db, keys=ids[[1]], column=c("symbol", "gene_name"), keytype="gene_id"))
+  tmp <- data.table(data_results)
+  expVals <- tmp[GENE_GI %in% annot$gene_id, ]
+  final_annot <- merge.data.table(annot, expVals, by.x ="gene_id", by.y = "GENE_GI")
+  setorder(final_annot, Ri12h_vs_Rm12h_p.adj)
+  GoDF[[goID]] <- final_annot
+}
+```
+
+For loop to add every sheet, every sheet is a GO_ID with a p.value < 0.05.
+Add Hyperlinks to Summary Page.
+Add conditional formating to highligh significant foldchange / p.values.
+
+```{r}
+for (x in 1:sum(tab12h$raw.p.value < 0.05)) {
+  goID <- tab12h[x, "GO.ID"]
+  sheetname <- substring(tab12h[x, "GO.ID"], 4)
+  addWorksheet(excel, sheetname)
+  writeData(GoDF[[x]], wb = excel, sheet = sheetname, rowNames = FALSE)
+  writeFormula(excel, "Summary", startRow = x+1, 
+               x = makeHyperlinkString(sheet = sheetname, row = 1, col = 1
+                                       , text = goID))
+  conditionalFormatting(excel, sheetname, cols=18, rows=2:(nrow(GoDF[[x]])+1), rule=upreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=18, rows=2:(nrow(GoDF[[x]])+1), rule=downreg, style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=8, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
+  conditionalFormatting(excel, sheetname, cols=11, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
+}
+
+saveWorkbook(excel, file = fileName, overwrite = TRUE)
+```
+
+
+```{r}
+no_offspring <- function(go){
+  ont <- Ontology(go)
+  if (ont == "BP") {res <- GOBPOFFSPRING[[go]]}
+  if (ont == "MF") {res <- GOMFOFFSPRING[[go]]}
+  if (ont == "CC") {res <- GOCCOFFSPRING[[go]]}
+
+  unique(if_else(is.na(res), "yes", "no"))
+}
+```
+
+add extra ontology
+
+```{r}
+test <- data.table(AnnotationDbi::select(org.Vvinifera.eg.db, keys=data_results$GENE_GI, column=c("go_idall"), keytype="gene_id"))
+test$ontology <- sapply(test$go_idall, Ontology)
+test$term <- sapply(test$go_idall, Term)
+#test$no_offspring <- sapply(test$go_idall, no_offspring)
+head(test)
+#Remove ancestors
+#test <- test[no_offspring == "yes", c("gene_id","go_idall","ontology","term")]
+#head(test)
+```
+
+```{r}
+# Get ancestors given a GO id
+ancestors <- function(go, ont){
+  if (is.null(ont)) {ont <- Ontology(go)}
+  if (ont == "BP") {res <- GOBPANCESTOR[[go]]}
+  if (ont == "MF") {res <- GOMFANCESTOR[[go]]}
+  if (ont == "CC") {res <- GOCCANCESTOR[[go]]}
+
+  res
+}
+
+# Get GO ID given a gene id, also remove ancestors
+get_ontology <- function(gi, metadat, ont) {
+  ids <- metadat[gene_id == gi & ontology == ont, go_idall]
+  anc <- c()
+  for (go_id in ids) {
+    anc <- append(anc, ancestors(go_id, ont=ont))
+  }
+  unique(anc)
+  go_ids <- setdiff(ids, anc)
+  
+  return(paste(go_ids, Term(go_ids), collapse = "; "))
+}
+
+data_results2 <- data_results
+data_results2$BiologicalProcess <- sapply(data_results2$GENE_GI ,get_ontology, metadat=test, ont="BP")
+data_results2$MolecularFunction <- sapply(data_results2$GENE_GI ,get_ontology, metadat=test, ont="MF")
+data_results2$CelularComponent <- sapply(data_results2$GENE_GI ,get_ontology, metadat=test, ont="CC")
+```
+
+```{r}
+write.table(data_results2, "Results_with_GO.tsv", sep = "\t", row.names = FALSE)
+```
+
+```{r}
+# Function go get protein names from fasta files
+get_prot_name <- function(id) {
+  f <- file(paste0("Tests/",id,".fasta"), "r")
+  id <- str_match(readLines(f, n=1), "\\w+\\.*[[:digit:]]*(?=[[:space:]])")
+  close(f)
+  return(id)
+}
+```
+
+```{r}
+data_results2$Protein_ID <- sapply(data_results2$ID, get_prot_name)
+head(data_results2)
+```
+
+
+```{r}
+# Get ApopoplastP results
+f <- file("Tests/ApoplastP_results/Predictions_ApoplasticCandidates.fasta", "r")
+apoplast_results <- readLines(f)
+close(f)
+apoplast_results <- apoplast_results[grepl("^>", apoplast_results)]
+
+prot_ids <- str_match(apoplast_results, "\\w+\\.*[[:digit:]]*(?=[[:space:]])")
+AP_results <- str_match(apoplast_results, "(?<=\\:\\s)[0-1]{1}\\.*[[:digit:]]*")
+
+APP <- data.table(prot_ids,AP_results)
+setnames(APP, c("Protein_ID", "ApoplastP"))
+head(APP)
+
+#merge with main results
+
+data_results2 <- merge.data.table(data_results2, APP, by.x = "Protein_ID", by.y = "Protein_ID", all = TRUE)
+```
+
+```{r}
+# Get SignalP results
+signalP <- fread("Tests/SignalP_results/output.gff3", sep2 = "\t", skip = 1)
+setnames(signalP, c("Protein_ID", "Prediction", "Type", "Start", "End", "SignalP", "Strand", "Phase", "Attributes"))
+head(signalP)
+data_results2 <- merge.data.table(data_results2, signalP[,c("Protein_ID","SignalP")], by.x = "Protein_ID", by.y = "Protein_ID", all = TRUE)
+
+head(data_results2)
+```
+
+```{r}
+write.table(data_results2, "Results_with_GO_&_predictions.tsv", sep = "\t", row.names = FALSE)
 ```
