@@ -21,6 +21,11 @@ library("AnnotationDbi")
 library("topGO")
 library("openxlsx")
 library("data.table")
+library("ggplot2")
+library("reshape2")
+library("RColorBrewer")
+library("ggthemes")
+library("rrvgo")
 ```
 
 
@@ -234,7 +239,7 @@ GOdata6h <- new("topGOdata",
               annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
               ID = "entrez")
 
-resultKS6h <- runTest(GOdata6h, algorithm = "weight01", statistic = "fisher")
+resultKS6h <- runTest(GOdata6h, algorithm = "classic", statistic = "fisher")
 
 tab6h <- GenTable(GOdata6h, raw.p.value = resultKS6h, topNodes = length(resultKS6h@score), numChar = 120)
 # Convert p.value to numeric
@@ -243,7 +248,7 @@ tab6h$raw.p.value <- as.numeric(tab6h$raw.p.value)
 head(tab6h, 15)
 
 par(cex = 0.6)
-showSigOfNodes(GOdata6h, score(resultKS6h), firstSigNodes = 5, useInfo = "def")
+showSigOfNodes(GOdata6h, score(resultKS6h), firstSigNodes = 6, useInfo = "def")
 par(cex = 1)
 ```
 
@@ -272,7 +277,7 @@ GOdata12h <- new("topGOdata",
                 annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
                 ID = "entrez")
 
-resultKS12h <- runTest(GOdata12h, algorithm = "weight01", statistic = "fisher")
+resultKS12h <- runTest(GOdata12h, algorithm = "classic", statistic = "fisher")
 
 tab12h <- GenTable(GOdata12h, raw.p.value = resultKS12h, topNodes = length(resultKS12h@score), numChar = 120)
 # Convert p.value to numeric
@@ -281,7 +286,7 @@ tab12h$raw.p.value <- as.numeric(tab12h$raw.p.value)
 head(tab12h, 15)
 
 par(cex = 0.6)
-showSigOfNodes(GOdata12h, score(resultKS12h), firstSigNodes = 5, useInfo = "def")
+showSigOfNodes(GOdata12h, score(resultKS12h), firstSigNodes = 12, useInfo = "def")
 par(cex = 1)
 ```
 
@@ -774,4 +779,107 @@ head(data_results2)
 
 ```{r}
 write.table(data_results2, "Results_with_GO_&_predictions.tsv", sep = "\t", row.names = FALSE)
+```
+
+```{r}
+library(rrvgo)
+```
+
+```{r}
+simMatrix6h <- calculateSimMatrix(tab6h[tab6h$raw.p.value<0.05,c("GO.ID")],
+                                orgdb="org.At.tair.db",
+                                ont="BP",
+                                method="Rel")
+scores6h <- setNames(-log10(tab6h[tab6h$raw.p.value<0.05,c("raw.p.value")]), tab6h[tab6h$raw.p.value<0.05,c("GO.ID")])
+reducedTerms6h <- reduceSimMatrix(simMatrix6h,
+                                scores6h,
+                                threshold=0.7,
+                                orgdb="org.At.tair.db")
+treemapPlot(reducedTerms6h)
+```
+
+```{r}
+simMatrix12h <- calculateSimMatrix(tab12h[tab12h$raw.p.value<0.05,c("GO.ID")],
+                                orgdb="org.At.tair.db",
+                                ont="BP",
+                                method="Rel")
+scores12h <- setNames(-log10(tab12h[tab12h$raw.p.value<0.05,c("raw.p.value")]), tab12h[tab12h$raw.p.value<0.05,c("GO.ID")])
+reducedTerms12h <- reduceSimMatrix(simMatrix12h,
+                                scores12h,
+                                threshold=0.7,
+                                orgdb="org.At.tair.db")
+treemapPlot(reducedTerms12h)
+```
+
+```{r}
+final_results <- data.table(data_results2)
+
+diffGO12h <- data.table(reducedTerms12h)[go == parent, go]
+
+plot12h_full <- data.table(tab12h)[GO.ID %in% diffGO12h]
+
+fc <- 2
+
+plot12h_full[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio > fc, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio < -fc, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F))]
+
+CapStr <- function(y) {
+  c <- strsplit(y, " ")[[1]]
+  paste(toupper(substring(c, 1,1)), substring(c, 2),
+      sep="", collapse=" ")
+}
+plot12h_full$Term2 <- sapply(plot12h_full$Term, CapStr, USE.NAMES = F)
+```
+
+```{r}
+pal<-brewer.pal(3,"PuOr")
+plotBP12h <- ggplot() + geom_bar(data=plot12h_full, aes(x = Term2, y=Positive, fill=pal[1]), position="stack", stat="identity") +
+  geom_bar(data=plot12h_full, aes(x = Term2, y=-Negative, fill=pal[3]), position="stack", stat="identity") +
+  geom_hline(yintercept = 0, color =c("white")) +
+  scale_fill_identity("Number of Proteins", labels = c("Down accumulated", "Up accumulated"), breaks=c(pal[3],pal[1]), guide="legend") + 
+  theme_fivethirtyeight() + 
+  coord_flip() +
+  labs(title="12hpi GO Biological Process", y="",x="") +
+  theme(plot.title = element_text(size=14, hjust=0.5)) +
+  theme(axis.text.y = element_text(hjust=1)) +
+  theme(legend.position = "bottom") +
+  scale_y_continuous(breaks=seq(-10,30,5), limits=c(-10,30))
+plotBP12h
+ggsave("BP12h.png", plot = plotBP12h, width = 10, height = 7, dpi = 600)
+```
+
+
+```{r}
+final_results <- data.table(data_results2)
+
+diffGO6h <- data.table(reducedTerms6h)[go == parent, go]
+
+plot6h_full <- data.table(tab6h)[GO.ID %in% diffGO6h]
+
+fc <- 2
+
+plot6h_full[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio > fc, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio < -fc, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F))]
+
+CapStr <- function(y) {
+  c <- strsplit(y, " ")[[1]]
+  paste(toupper(substring(c, 1,1)), substring(c, 2),
+      sep="", collapse=" ")
+}
+plot6h_full$Term2 <- sapply(plot6h_full$Term, CapStr, USE.NAMES = F)
+```
+
+```{r}
+pal<-brewer.pal(3,"PuOr")
+plotBP6h <- ggplot() + geom_bar(data=plot6h_full, aes(x = Term2, y=Positive, fill=pal[1]), position="stack", stat="identity") +
+  geom_bar(data=plot6h_full, aes(x = Term2, y=-Negative, fill=pal[3]), position="stack", stat="identity") +
+  geom_hline(yintercept = 0, color =c("white")) +
+  scale_fill_identity("Number of Proteins", labels = c("Down accumulated", "Up accumulated"), breaks=c(pal[3],pal[1]), guide="legend") + 
+  theme_fivethirtyeight() + 
+  coord_flip() +
+  labs(title="6hpi GO Biological Process", y="",x="") +
+  theme(plot.title = element_text(size=14, hjust=0.5)) +
+  theme(axis.text.y = element_text(hjust=1)) +
+  theme(legend.position = "bottom") +
+  scale_y_continuous(breaks=seq(-10,5,5), limits=c(-10,5))
+plotBP6h
+ggsave("BP6h.png", plot = plotBP6h, width = 10, height = 7, dpi = 600)
 ```
