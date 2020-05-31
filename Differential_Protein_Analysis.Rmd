@@ -1,0 +1,859 @@
+---
+title: "Grapevine – downy mildew rendez-vous: first hours’ proteomics of the incompatible interaction"
+author: "Rui Nascimento"
+date: "`r format(Sys.time(), '%d %B, %Y (%X)')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# R Enviroment Setup
+
+Load Required Libraries
+
+```{r, message=FALSE}
+library("DEP")
+library("dplyr")
+library("plyr")
+library("stringr")
+library("rentrez")
+library("org.Vvinifera.eg.db")
+library("AnnotationDbi")
+library("topGO")
+library("openxlsx")
+library("data.table")
+library("ggplot2")
+library("reshape2")
+library("RColorBrewer")
+library("ggthemes")
+library("rrvgo")
+library("DT")
+library("ComplexHeatmap")
+library("ggpubr")
+```
+
+Define some functions for later use
+
+```{r}
+# Helper function to extract GI from fasta headers in MaxQuant results
+getGI <- function(s) {
+  ex <- str_extract_all(string = s, pattern = "gi\\|[:digit:]+\\|")[[1]]
+  str_extract_all(string = ex, pattern = "[:digit:]+",simplify = T)[,1]}
+
+# Get 1 GI, priority to GI with XP annotation, otherwise get the first GI 
+get1GI <- function(x){
+  if (str_detect(x, "XP")) {gi <- str_extract(string = x, pattern = "(?<=gi\\|)[:number:]+(?=\\|ref\\|XP)")}
+  else {gi <- str_extract(string = x, pattern = "(?<=gi\\|)[:number:]+")}
+  return(gi)}
+
+# Get the Gene ID of a protein
+protein2gene <- function(x, api_key = NULL){
+  if (is.null(api_key)) {gene_gi <- entrez_link(dbfrom="protein", db="gene", id = x)$links$protein_gene[1]}
+  else {gene_gi <- entrez_link(dbfrom="protein", db="gene", id = x, api_key = api_key)$links$protein_gene[1]}
+  if (is.null(gene_gi)){gene_gi <- ""}
+  return(gene_gi[[1]])}
+
+# Get protein ID Name
+proteinName <- function(x, api_key = NULL){
+  if (is.null(api_key)) {protName <- entrez_summary(db = "protein", id = x)$title}
+  else {protName <- entrez_summary(db = "protein", id = x, api_key = api_key)$title}
+  if (is.null(protName)){protName <- ""}
+  return(protName)}
+
+# Get Protein Code, priority to XP annotation, otherwise get other 
+getProteinCode <- function(x){
+  if (str_detect(x, "XP")) {gi <- str_extract(string = x, pattern = "XP_[:number:]+(\\.[:number:])*")}
+  else {gi <- str_extract(string = x, pattern = "(?<=gi\\|[:alnum:]{6,9}\\|[:alnum:]{1,4}\\|)[:alnum:]+_*[:alnum:]+(\\.[:number:])*")}
+  return(gi)}
+
+# Get all names
+get_names <- function(prot_ids) {
+  gi <- getGI(prot_ids)
+  name <-  lapply(gi, function(id) (entrez_summary(id = id, db = "protein")$title))
+  return(paste(name, collapse = ";"))}
+
+# Display table function for RMarkdown
+DTable <- function(dt){
+  datatable(dt, extensions = 'Buttons', options = list(
+    dom = 'Blfrtip',
+    pageLength = 5,
+    lengthMenu = c(5, 10, 20, 50, 100),
+    buttons = c('copy', 'csv', 'excel')))}
+
+# Catitalize first letter of every word in a string
+CapStr <- function(y) {
+  c <- strsplit(y, " ")[[1]]
+  paste(toupper(substring(c, 1,1)), substring(c, 2),
+      sep="", collapse=" ")
+}
+```
+
+# Label-Free Quantification
+
+Read MaxQuant Protein Groups file and remove Reverse hits and contaminants
+
+```{r}
+data <- read.delim("Vitis_Protein_Groups.tsv", header=TRUE, sep="\t", stringsAsFactors = FALSE)
+dim(data)
+data <- filter(data, Reverse != "+", Potential.contaminant != "+")
+dim(data)
+```
+
+Are any there duplicated genes?
+
+```{r}
+data$Protein.IDs %>% duplicated() %>% any()
+```
+
+Add GeneID info to dataframe
+
+```{r}
+#Get 1 GI and add to ID column
+data$ID <- as.character(sapply(data$Protein.IDs, get1GI))
+data$name <- as.character(data$Protein.IDs)
+```
+
+Generate unique identifiers based on "name" and "id" columns.
+
+```{r}
+data_unique <- make_unique(data, names = "name", ids = "ID", delim = ";")
+```
+
+Generate a SummarizedExperiment object using column names
+
+```{r}
+LFQ_columns <- grep("Intensity\\.R(m|i)(6|12)", colnames(data)) # get LFQ column numbers
+experimental_design <- read.delim("ExperimentalDesign_no24.csv", header=TRUE, sep="\t", stringsAsFactors = FALSE)
+data_se <- make_se(data, LFQ_columns, experimental_design)
+```
+
+Frequency Plot
+
+```{r}
+plot_frequency(data_se)
+```
+
+## Filter missing values
+
+Filter for proteins that are identified in 2 out of 3 replicates of at least one condition
+
+```{r}
+data_filt <- filter_missval(data_se, thr = 1)
+```
+
+Barplot of the number of identified proteins per samples
+
+```{r}
+plot_numbers(data_filt)
+```
+
+## Normalization
+
+Normalize the data
+```{r}
+data_norm <- normalize_vsn(data_filt)
+```
+
+Visualize Normalization
+
+```{r}
+plot_normalization(data_filt, data_norm)
+```
+
+## Missing values imputation
+
+Impute missing data using random draws from a Gaussian distribution centered around a minimal value (for MNAR)
+
+```{r, message=FALSE}
+data_imp <- impute(data_norm, fun = "MinProb", q = 0.01)
+```
+
+## Differential accomulation analysis
+
+Generate contrast tests for 6 and 12 hpi
+
+```{r}
+data_diff_manual <- test_diff(data_imp, type = "manual", 
+                              test = c("Ri6h_vs_Rm6h", "Ri12h_vs_Rm12h"))
+```
+
+```{r}
+dep <- add_rejections(data_diff_manual, alpha = 0.05, lfc = 1)
+```
+  
+## Results Table
+
+```{r}
+# Generate a results table
+data_results <- get_results(dep)
+```
+
+Get Gene IDs from Protein IDs from NCBI servers
+
+```{r}
+api_key <- readLines("~/.ncbi_api")
+data_results$GENE_GI <- sapply(data_results$ID, protein2gene, api_key = api_key, simplify = TRUE, USE.NAMES = FALSE)
+data_results$PROTEIN_NAME <- sapply(data_results$ID, proteinName, api_key = api_key, simplify = TRUE, USE.NAMES = FALSE)
+data_results$PROTEIN_ID <- sapply(data_results$name, getProteinCode, simplify = TRUE, USE.NAMES = FALSE)
+```
+
+
+```{r, message=FALSE}
+plot_pca(dep, x = 1, y = 2, n = 100, point_size = 4)
+```
+
+### Heatmap of Fold-Change
+
+```{r}
+topX <- 50
+
+heat <- data.table(data_results)[Ri12h_vs_Rm12h_p.val < 0.05 | Ri6h_vs_Rm6h_p.val < 0.05,c("PROTEIN_ID" ,"Ri12h_vs_Rm12h_ratio","Ri6h_vs_Rm6h_ratio")]
+heat <- heat[, `:=` (Difference = abs(Ri12h_vs_Rm12h_ratio - Ri6h_vs_Rm6h_ratio))]
+setorder(heat, -Difference)
+heat <- heat[1:topX,-"Difference"]
+heat <- as.matrix(heat[,-"PROTEIN_ID"], rownames=heat$PROTEIN_ID)
+colnames(heat) <- c("6hpi", "12hpi")
+
+
+heatmap <- ComplexHeatmap::Heatmap(heat,
+                        name = "log2 Fold Change",
+                        row_names_side = "left",
+                        column_names_side = "top",
+                        column_title = paste("Heatmap of top", topX, "Fold-Changes"),
+                        row_title = "Protein ID",
+                        row_title_rot = 0,
+                        column_names_rot = 0,
+                        column_names_centered = TRUE,
+                        cluster_columns = FALSE)
+
+pdf("fc_heatmap.pdf", width = 6, height = 10)
+heatmap
+dev.off()
+heatmap
+```
+
+
+## 6 hpi
+
+### PCA
+
+PCA plot of the 100 most significat protein
+
+```{r, message=FALSE}
+plot_pca(dep[, c(4,5,6,10,11,12)], x = 1, y = 2, n = 100, point_size = 4)
+```
+
+### Differential Accumulation Results
+
+6 hpi differential accumulation results.
+Ratio is the 'log2(Fold)' change of the inoculated samples over the mock inoculated
+
+```{r}
+results_6hpi <- data.table(data_results)[,c("PROTEIN_NAME", "ID", "Ri6h_vs_Rm6h_ratio", "Ri6h_vs_Rm6h_p.val")]
+DTable(results_6hpi)
+```
+
+## 12 hpi
+
+### PCA
+
+PCA plot of the 100 most significat protein
+
+```{r, message=FALSE}
+plot_pca(dep[, c(1,2,3,7,8,9)], x = 1, y = 2, n = 100, point_size = 4)
+```
+
+### Diferential Accumulation Results
+
+12 hpi differential accumulation results.
+Ratio is the 'log2(Fold)' change of the inoculated samples over the mock inoculated
+
+```{r}
+results_12hpi <- data.table(data_results)[,c("PROTEIN_NAME", "ID", "Ri12h_vs_Rm12h_ratio", "Ri12h_vs_Rm12h_p.val")]
+DTable(results_6hpi)
+```
+
+
+# Go enrichment analysis
+
+## 6hpi
+
+Genererate genelist of differentially accomulated proteins using the Gene IDs
+
+```{r}
+geneList6h <- data_results$Ri6h_vs_Rm6h_p.val
+names(geneList6h) <- data_results$GENE_GI
+```
+
+#### Biological Process
+
+Run the Go enrichment tests
+
+```{r, message=FALSE}
+GOdata6h_BP <- new("topGOdata",
+              ontology = "BP",
+              allGenes = geneList6h,
+              geneSelectionFun = function(x) (x < 0.05),
+              annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
+              ID = "entrez",
+              nodeSize = 3)
+
+resultKS6h_BP <- runTest(GOdata6h_BP, algorithm = "classic", statistic = "fisher")
+
+tab6h_BP <- GenTable(GOdata6h_BP, raw.p.value = resultKS6h_BP, topNodes = length(resultKS6h_BP@score), numChar = 120)
+# Convert p.value to numeric
+tab6h_BP$raw.p.value <- as.numeric(tab6h_BP$raw.p.value)
+
+DTable(tab6h_BP)
+
+par(cex = 0.6)
+showSigOfNodes(GOdata6h_BP, score(resultKS6h_BP), firstSigNodes = 10, useInfo = "def")
+par(cex = 1)
+```
+
+#### Molecular Function
+
+Run the Go enrichment tests
+
+```{r, message=FALSE}
+GOdata6h_MF <- new("topGOdata",
+              ontology = "MF",
+              allGenes = geneList6h,
+              geneSelectionFun = function(x) (x < 0.05),
+              annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
+              ID = "entrez")
+
+resultKS6h_MF <- runTest(GOdata6h_MF, algorithm = "classic", statistic = "fisher")
+
+tab6h_MF <- GenTable(GOdata6h_MF, raw.p.value = resultKS6h_MF, topNodes = length(resultKS6h_MF@score), numChar = 120)
+# Convert p.value to numeric
+tab6h_MF$raw.p.value <- as.numeric(tab6h_MF$raw.p.value)
+
+DTable(tab6h_MF)
+
+par(cex = 0.6)
+showSigOfNodes(GOdata6h_MF, score(resultKS6h_MF), firstSigNodes = 10, useInfo = "def")
+par(cex = 1)
+```
+
+
+#### Cellular Component
+
+Run the Go enrichment tests
+
+```{r, message=FALSE}
+GOdata6h_CC <- new("topGOdata",
+              ontology = "CC",
+              allGenes = geneList6h,
+              geneSelectionFun = function(x) (x < 0.05),
+              annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
+              ID = "entrez")
+
+resultKS6h_CC <- runTest(GOdata6h_CC, algorithm = "classic", statistic = "fisher")
+
+tab6h_CC <- GenTable(GOdata6h_CC, raw.p.value = resultKS6h_CC, topNodes = length(resultKS6h_CC@score), numChar = 120)
+# Convert p.value to numeric
+tab6h_CC$raw.p.value <- as.numeric(tab6h_CC$raw.p.value)
+
+DTable(tab6h_CC)
+
+par(cex = 0.6)
+showSigOfNodes(GOdata6h_CC, score(resultKS6h_CC), firstSigNodes = 10, useInfo = "def")
+par(cex = 1)
+```
+
+## 12hpi
+
+Genererate genelist of differentially accomulated proteins using the Gene IDs
+
+```{r}
+geneList12h <- data_results$Ri12h_vs_Rm12h_p.val
+names(geneList12h) <- data_results$GENE_GI
+```
+
+#### Biological Process
+
+Run the Go enrichment tests
+
+```{r, message=FALSE}
+GOdata12h_BP <- new("topGOdata",
+              ontology = "BP",
+              allGenes = geneList12h,
+              geneSelectionFun = function(x) (x < 0.05),
+              annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
+              ID = "entrez")
+
+resultKS12h_BP <- runTest(GOdata12h_BP, algorithm = "classic", statistic = "fisher")
+
+tab12h_BP <- GenTable(GOdata12h_BP, raw.p.value = resultKS12h_BP, topNodes = length(resultKS12h_BP@score), numChar = 120)
+# Convert p.value to numeric
+tab12h_BP$raw.p.value <- as.numeric(tab12h_BP$raw.p.value)
+
+DTable(tab12h_BP)
+
+par(cex = 0.6)
+showSigOfNodes(GOdata12h_BP, score(resultKS12h_BP), firstSigNodes = 10, useInfo = "def")
+par(cex = 1)
+```
+
+
+#### Molecular Function
+
+Run the Go enrichment tests
+
+```{r, message=FALSE}
+GOdata12h_MF <- new("topGOdata",
+              ontology = "MF",
+              allGenes = geneList12h,
+              geneSelectionFun = function(x) (x < 0.05),
+              annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
+              ID = "entrez")
+
+resultKS12h_MF <- runTest(GOdata12h_MF, algorithm = "classic", statistic = "fisher")
+
+tab12h_MF <- GenTable(GOdata12h_MF, raw.p.value = resultKS12h_MF, topNodes = length(resultKS12h_MF@score), numChar = 120)
+# Convert p.value to numeric
+tab12h_MF$raw.p.value <- as.numeric(tab12h_MF$raw.p.value)
+
+DTable(tab12h_MF)
+
+par(cex = 0.6)
+showSigOfNodes(GOdata12h_MF, score(resultKS12h_MF), firstSigNodes = 10, useInfo = "def")
+par(cex = 1)
+```
+
+
+#### Cellular Component
+
+Run the Go enrichment tests
+
+```{r, message=FALSE}
+GOdata12h_CC <- new("topGOdata",
+              ontology = "CC",
+              allGenes = geneList12h,
+              geneSelectionFun = function(x) (x < 0.05),
+              annot = annFUN.org , mapping = "org.Vvinifera.eg.db",
+              ID = "entrez")
+
+resultKS12h_CC <- runTest(GOdata12h_CC, algorithm = "classic", statistic = "fisher")
+
+tab12h_CC <- GenTable(GOdata12h_CC, raw.p.value = resultKS12h_CC, topNodes = length(resultKS12h_CC@score), numChar = 120)
+# Convert p.value to numeric
+tab12h_CC$raw.p.value <- as.numeric(tab12h_CC$raw.p.value)
+
+DTable(tab12h_CC)
+
+par(cex = 0.6)
+showSigOfNodes(GOdata12h_CC, score(resultKS12h_CC), firstSigNodes = 10, useInfo = "def")
+par(cex = 1)
+```
+
+Add child ontology to results dataframe for manual curation
+
+```{r}
+# Get ancestors given a GO id
+ancestors <- function(go, ont){
+  if (is.null(ont)) {ont <- Ontology(go)}
+  if (ont == "BP") {res <- GOBPANCESTOR[[go]]}
+  if (ont == "MF") {res <- GOMFANCESTOR[[go]]}
+  if (ont == "CC") {res <- GOCCANCESTOR[[go]]}
+
+  res
+}
+
+# Get GO ID given a gene id, also remove ancestors
+get_ontology <- function(gi, metadat, ont) {
+  ids <- metadat[gene_id == gi & ontology == ont, go_idall]
+  anc <- c()
+  for (go_id in ids) {
+    anc <- append(anc, ancestors(go_id, ont=ont))
+  }
+  unique(anc)
+  go_ids <- setdiff(ids, anc)
+  
+  return(paste(go_ids, Term(go_ids), collapse = "; "))
+}
+
+# Extract metadata information
+metadat <- data.table(AnnotationDbi::select(org.Vvinifera.eg.db, keys=data_results$GENE_GI, column=c("go_idall"), keytype="gene_id"))
+metadat$ontology <- sapply(metadat$go_idall, Ontology)
+metadat$term <- sapply(metadat$go_idall, Term)
+
+# Generate Ontology for the 3 GO Term
+data_results2 <- data.table(data_results)
+data_results2$BiologicalProcess <- sapply(data_results2$GENE_GI ,get_ontology, metadat=metadat, ont="BP")
+data_results2$MolecularFunction <- sapply(data_results2$GENE_GI ,get_ontology, metadat=metadat, ont="MF")
+data_results2$CelularComponent <- sapply(data_results2$GENE_GI ,get_ontology, metadat=metadat, ont="CC")
+final_results <- data.table(data_results2)
+write.csv(final_results, "Results.csv", row.names = FALSE)
+```
+
+### Reduce GO Semantic Similarity
+
+6 hpi
+```{r}
+simMatrix6h_BP <- calculateSimMatrix(tab6h_BP[tab6h_BP$raw.p.value<0.05,c("GO.ID")],
+                                orgdb="org.At.tair.db", ont="BP", method="Rel")
+scores6h_BP <- setNames(-log10(tab6h_BP[tab6h_BP$raw.p.value<0.05,c("raw.p.value")]), tab6h_BP[tab6h_BP$raw.p.value<0.05,c("GO.ID")])
+reducedTerms6h_BP <- reduceSimMatrix(simMatrix6h_BP, scores6h_BP, threshold=0.4, orgdb="org.At.tair.db")
+treemapPlot(reducedTerms6h_BP)
+write.csv(reducedTerms6h_BP, "SemanticReduction_6hpi_BP.csv", row.names = FALSE)
+```
+
+```{r}
+simMatrix6h_MF <- calculateSimMatrix(tab6h_MF[tab6h_MF$raw.p.value<0.05,c("GO.ID")],
+                                orgdb="org.At.tair.db", ont="MF", method="Rel")
+scores6h_MF <- setNames(-log10(tab6h_MF[tab6h_MF$raw.p.value<0.05,c("raw.p.value")]), tab6h_MF[tab6h_MF$raw.p.value<0.05,c("GO.ID")])
+reducedTerms6h_MF <- reduceSimMatrix(simMatrix6h_MF, scores6h_MF, threshold=0.4, orgdb="org.At.tair.db")
+treemapPlot(reducedTerms6h_MF)
+write.csv(reducedTerms6h_MF, "SemanticReduction_6hpi_MF.csv", row.names = FALSE)
+```
+
+```{r}
+simMatrix6h_CC <- calculateSimMatrix(tab6h_CC[tab6h_CC$raw.p.value<0.05,c("GO.ID")],
+                                orgdb="org.At.tair.db", ont="CC", method="Rel")
+scores6h_CC <- setNames(-log10(tab6h_CC[tab6h_CC$raw.p.value<0.05,c("raw.p.value")]), tab6h_CC[tab6h_CC$raw.p.value<0.05,c("GO.ID")])
+reducedTerms6h_CC <- reduceSimMatrix(simMatrix6h_CC, scores6h_CC, threshold=0.4, orgdb="org.At.tair.db")
+treemapPlot(reducedTerms6h_CC)
+write.csv(reducedTerms6h_CC, "SemanticReduction_6hpi_CC.csv", row.names = FALSE)
+```
+
+12 hpi
+
+```{r}
+simMatrix12h_BP <- calculateSimMatrix(tab12h_BP[tab12h_BP$raw.p.value<0.05,c("GO.ID")],
+                                orgdb="org.At.tair.db", ont="BP", method="Rel")
+scores12h_BP <- setNames(-log10(tab12h_BP[tab12h_BP$raw.p.value<0.05,c("raw.p.value")]), tab12h_BP[tab12h_BP$raw.p.value<0.05,c("GO.ID")])
+reducedTerms12h_BP <- reduceSimMatrix(simMatrix12h_BP, scores12h_BP, threshold=0.4, orgdb="org.At.tair.db")
+treemapPlot(reducedTerms12h_BP)
+write.csv(reducedTerms12h_BP, "SemanticReduction_12hpi_BP.csv", row.names = FALSE)
+```
+
+```{r}
+simMatrix12h_MF <- calculateSimMatrix(tab12h_MF[tab12h_MF$raw.p.value<0.05,c("GO.ID")],
+                                orgdb="org.At.tair.db", ont="MF", method="Rel")
+scores12h_MF <- setNames(-log10(tab12h_MF[tab12h_MF$raw.p.value<0.05,c("raw.p.value")]), tab12h_MF[tab12h_MF$raw.p.value<0.05,c("GO.ID")])
+reducedTerms12h_MF <- reduceSimMatrix(simMatrix12h_MF, scores12h_MF, threshold=0.4, orgdb="org.At.tair.db")
+treemapPlot(reducedTerms12h_MF)
+write.csv(reducedTerms12h_MF, "SemanticReduction_12hpi_MF.csv", row.names = FALSE)
+```
+
+```{r}
+simMatrix12h_CC <- calculateSimMatrix(tab12h_CC[tab12h_CC$raw.p.value<0.05,c("GO.ID")],
+                                orgdb="org.At.tair.db", ont="CC", method="Rel")
+scores12h_CC <- setNames(-log10(tab12h_CC[tab12h_CC$raw.p.value<0.05,c("raw.p.value")]), tab12h_CC[tab12h_CC$raw.p.value<0.05,c("GO.ID")])
+reducedTerms12h_CC <- reduceSimMatrix(simMatrix12h_CC, scores12h_CC, threshold=0.4, orgdb="org.At.tair.db")
+treemapPlot(reducedTerms12h_CC)
+write.csv(reducedTerms12h_CC, "SemanticReduction_12hpi_CC.csv", row.names = FALSE)
+```
+
+
+## Plot GO results
+
+Plot results with fold change associated with each signficant GO Term
+
+```{r}
+diffGO6h_BP <- data.table(reducedTerms6h_BP)[go == parent, go]
+
+plot6h_full_BP <- data.table(tab6h_BP)[GO.ID %in% diffGO6h_BP]
+
+plot6h_full_BP[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_BP, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio > 2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_BP, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio < -2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F))]
+
+plot6h_full_BP$Term2 <- sapply(plot6h_full_BP$Term, CapStr, USE.NAMES = F)
+
+
+pal<-brewer.pal(3,"PuOr")
+data <- plot6h_full_BP[raw.p.value<0.05 & Positive+Negative>3]
+
+limit <- round_any(max(data[,Positive])+max(data[,Negative]),5,ceiling)
+sep <- if (limit>30) {10} else {5}
+
+data <- data.table::melt(data = data, id.vars = c("Term2"), measure.vars = c("Positive", "Negative"), variable.name = "Fold", value.name = "Count")
+data[Fold == "Negative", `:=` (Col = pal[3])]
+data[Fold == "Positive", `:=` (Col = pal[1])]
+
+plotBP6h <- ggplot() + geom_bar(data=data, aes(x = Term2, y=Count, fill=Col), position="stack", stat="identity") +
+  geom_hline(yintercept = 0, color =c("white")) +
+  scale_fill_identity("Number of modulated proteins", labels = c("Up accumulated", "Down accumulated"), breaks=c(pal[1],pal[3]), guide="legend") + 
+  theme_hc() + 
+  coord_flip() +
+  labs(title="6hpi GO Biological Process", y="",x="") +
+  theme(plot.title = element_text(size=16, hjust=0.5)) +
+  theme(axis.text = element_text(size=11)) +
+  theme(axis.text.y = element_text(hjust=1)) +
+  theme(legend.position = "bottom") +
+  scale_y_continuous(breaks=seq(0,limit,sep), limits=c(0,limit)) +
+  scale_x_discrete(label=function(x) stringr::str_trunc(x, 40))
+plotBP6h
+ggsave("BP6h.pdf", plot = plotBP6h, width = 10, height = 7, dpi = 600)
+```
+
+
+```{r}
+diffGO6h_MF <- data.table(reducedTerms6h_MF)[go == parent, go]
+
+plot6h_full_MF <- data.table(tab6h_MF)[GO.ID %in% diffGO6h_MF]
+
+plot6h_full_MF[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_MF, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio > 2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_MF, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio < -2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F))]
+
+plot6h_full_MF$Term2 <- sapply(plot6h_full_MF$Term, CapStr, USE.NAMES = F)
+
+
+pal<-brewer.pal(3,"PuOr")
+data <- plot6h_full_MF[raw.p.value<0.05 & Positive+Negative>3]
+
+limit <- round_any(max(data[,Positive])+max(data[,Negative]),5,ceiling)
+sep <- if (limit>30) {10} else {5}
+
+data <- data.table::melt(data = data, id.vars = c("Term2"), measure.vars = c("Positive", "Negative"), variable.name = "Fold", value.name = "Count")
+data[Fold == "Negative", `:=` (Col = pal[3])]
+data[Fold == "Positive", `:=` (Col = pal[1])]
+
+plotMF6h <- ggplot() + geom_bar(data=data, aes(x = Term2, y=Count, fill=Col), position="stack", stat="identity") +
+  geom_hline(yintercept = 0, color =c("white")) +
+  scale_fill_identity("Number of modulated proteins", labels = c("Up accumulated", "Down accumulated"), breaks=c(pal[1],pal[3]), guide="legend") + 
+  theme_hc() + 
+  coord_flip() +
+  labs(title="6hpi GO Molecular Function", y="",x="") +
+  theme(plot.title = element_text(size=16, hjust=0.5)) +
+  theme(axis.text = element_text(size=11)) +
+  theme(axis.text.y = element_text(hjust=1)) +
+  theme(legend.position = "bottom") +
+  scale_y_continuous(breaks=seq(0,limit,sep), limits=c(0,limit)) +
+  scale_x_discrete(label=function(x) stringr::str_trunc(x, 40))
+plotMF6h
+ggsave("MF6h.pdf", plot = plotMF6h, width = 10, height = 7, dpi = 600)
+```
+
+
+```{r}
+diffGO6h_CC <- data.table(reducedTerms6h_CC)[go == parent, go]
+
+plot6h_full_CC <- data.table(tab6h_CC)[GO.ID %in% diffGO6h_CC]
+
+plot6h_full_CC[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_CC, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio > 2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_CC, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio < -2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F))]
+
+plot6h_full_CC$Term2 <- sapply(plot6h_full_CC$Term, CapStr, USE.NAMES = F)
+
+
+pal<-brewer.pal(3,"PuOr")
+data <- plot6h_full_CC[raw.p.value<0.05 & Positive+Negative>3]
+
+limit <- round_any(max(data[,Positive])+max(data[,Negative]),5,ceiling)
+sep <- if (limit>30) {10} else {5}
+
+data <- data.table::melt(data = data, id.vars = c("Term2"), measure.vars = c("Positive", "Negative"), variable.name = "Fold", value.name = "Count")
+data[Fold == "Negative", `:=` (Col = pal[3])]
+data[Fold == "Positive", `:=` (Col = pal[1])]
+
+plotCC6h <- ggplot() + geom_bar(data=data, aes(x = Term2, y=Count, fill=Col), position="stack", stat="identity") +
+  geom_hline(yintercept = 0, color =c("white")) +
+  scale_fill_identity("Number of modulated proteins", labels = c("Up accumulated", "Down accumulated"), breaks=c(pal[1],pal[3]), guide="legend") + 
+  theme_hc() + 
+  coord_flip() +
+  labs(title="6hpi GO Celular Component", y="",x="") +
+  theme(plot.title = element_text(size=16, hjust=0.5)) +
+  theme(axis.text = element_text(size=11)) +
+  theme(axis.text.y = element_text(hjust=1)) +
+  theme(legend.position = "bottom") +
+  scale_y_continuous(breaks=seq(0,limit,sep), limits=c(0,limit)) +
+  scale_x_discrete(label=function(x) stringr::str_trunc(x, 40))
+plotCC6h
+ggsave("CC6h.pdf", plot = plotCC6h, width = 10, height = 7, dpi = 600)
+```
+
+
+```{r}
+diffGO12h_BP <- data.table(reducedTerms12h_BP)[go == parent, go]
+
+plot12h_full_BP <- data.table(tab12h_BP)[GO.ID %in% diffGO12h_BP]
+
+plot12h_full_BP[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_BP, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio > 2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_BP, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio < -2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F))]
+
+plot12h_full_BP$Term2 <- sapply(plot12h_full_BP$Term, CapStr, USE.NAMES = F)
+
+
+pal<-brewer.pal(3,"PuOr")
+data <- plot12h_full_BP[raw.p.value<0.05 & Positive+Negative>3]
+
+limit <- round_any(max(data[,Positive])+max(data[,Negative]),5,ceiling)
+sep <- if (limit>30) {10} else {5}
+
+data <- data.table::melt(data = data, id.vars = c("Term2"), measure.vars = c("Positive", "Negative"), variable.name = "Fold", value.name = "Count")
+data[Fold == "Negative", `:=` (Col = pal[3])]
+data[Fold == "Positive", `:=` (Col = pal[1])]
+
+plotBP12h <- ggplot() + geom_bar(data=data, aes(x = Term2, y=Count, fill=Col), position="stack", stat="identity") +
+  geom_hline(yintercept = 0, color =c("white")) +
+  scale_fill_identity("Number of modulated proteins", labels = c("Up accumulated", "Down accumulated"), breaks=c(pal[1],pal[3]), guide="legend") + 
+  theme_hc() + 
+  coord_flip() +
+  labs(title="12hpi GO Biological Process", y="",x="") +
+  theme(plot.title = element_text(size=16, hjust=0.5)) +
+  theme(axis.text = element_text(size=11)) +
+  theme(axis.text.y = element_text(hjust=1)) +
+  theme(legend.position = "bottom") +
+  scale_y_continuous(breaks=seq(0,limit,sep), limits=c(0,limit)) +
+  scale_x_discrete(label=function(x) stringr::str_trunc(x, 40))
+plotBP12h
+ggsave("BP12h.pdf", plot = plotBP12h, width = 10, height = 7, dpi = 600)
+```
+
+
+```{r}
+diffGO12h_MF <- data.table(reducedTerms12h_MF)[go == parent, go]
+
+plot12h_full_MF <- data.table(tab12h_MF)[GO.ID %in% diffGO12h_MF]
+
+plot12h_full_MF[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_MF, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio > 2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_MF, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio < -2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F))]
+
+plot12h_full_MF$Term2 <- sapply(plot12h_full_MF$Term, CapStr, USE.NAMES = F)
+
+
+pal<-brewer.pal(3,"PuOr")
+data <- plot12h_full_MF[raw.p.value<0.05 & Positive+Negative>3]
+
+limit <- round_any(max(data[,Positive])+max(data[,Negative]),5,ceiling)
+sep <- if (limit>30) {10} else {5}
+
+data <- data.table::melt(data = data, id.vars = c("Term2"), measure.vars = c("Positive", "Negative"), variable.name = "Fold", value.name = "Count")
+data[Fold == "Negative", `:=` (Col = pal[3])]
+data[Fold == "Positive", `:=` (Col = pal[1])]
+
+plotMF12h <- ggplot() + geom_bar(data=data, aes(x = Term2, y=Count, fill=Col), position="stack", stat="identity") +
+  geom_hline(yintercept = 0, color =c("white")) +
+  scale_fill_identity("Number of modulated proteins", labels = c("Up accumulated", "Down accumulated"), breaks=c(pal[1],pal[3]), guide="legend") + 
+  theme_hc() + 
+  coord_flip() +
+  labs(title="12hpi GO Molecular Function", y="",x="") +
+  theme(plot.title = element_text(size=16, hjust=0.5)) +
+  theme(axis.text = element_text(size=11)) +
+  theme(axis.text.y = element_text(hjust=1)) +
+  theme(legend.position = "bottom") +
+  scale_y_continuous(breaks=seq(0,limit,sep), limits=c(0,limit)) +
+  scale_x_discrete(label=function(x) stringr::str_trunc(x, 40))
+plotMF12h
+ggsave("MF12h.pdf", plot = plotMF12h, width = 10, height = 7, dpi = 600)
+```
+
+
+```{r}
+diffGO12h_CC <- data.table(reducedTerms12h_CC)[go == parent, go]
+
+plot12h_full_CC <- data.table(tab12h_CC)[GO.ID %in% diffGO12h_CC]
+
+plot12h_full_CC[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_CC, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio > 2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_CC, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio < -2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F))]
+
+plot12h_full_CC$Term2 <- sapply(plot12h_full_CC$Term, CapStr, USE.NAMES = F)
+
+
+pal<-brewer.pal(3,"PuOr")
+data <- plot12h_full_CC[raw.p.value<0.05 & Positive+Negative>3]
+
+limit <- round_any(max(data[,Positive])+max(data[,Negative]),5,ceiling)
+sep <- if (limit>30) {10} else {5}
+
+data <- data.table::melt(data = data, id.vars = c("Term2"), measure.vars = c("Positive", "Negative"), variable.name = "Fold", value.name = "Count")
+data[Fold == "Negative", `:=` (Col = pal[3])]
+data[Fold == "Positive", `:=` (Col = pal[1])]
+
+plotCC12h <- ggplot() + geom_bar(data=data, aes(x = Term2, y=Count, fill=Col), position="stack", stat="identity") +
+  geom_hline(yintercept = 0, color =c("white")) +
+  scale_fill_identity("Number of modulated proteins", labels = c("Up accumulated", "Down accumulated"), breaks=c(pal[1],pal[3]), guide="legend") + 
+  theme_hc() + 
+  coord_flip() +
+  labs(title="12hpi GO Celular Component", y="",x="") +
+  theme(plot.title = element_text(size=16, hjust=0.5)) +
+  theme(axis.text = element_text(size=11)) +
+  theme(axis.text.y = element_text(hjust=1)) +
+  theme(legend.position = "bottom") +
+  scale_y_continuous(breaks=seq(0,limit,sep), limits=c(0,limit)) +
+  scale_x_discrete(label=function(x) stringr::str_trunc(x, 40))
+plotCC12h
+ggsave("CC12h.pdf", plot = plotCC12h, width = 10, height = 7, dpi = 600)
+```
+
+```{r}
+final_plot <- ggarrange(plotBP6h + theme(legend.title = element_text(size = 16), legend.text = element_text(size = 16)), 
+                        plotMF6h, 
+                        plotCC6h, 
+                        plotBP12h, 
+                        plotMF12h, 
+                        plotCC12h,
+                        nrow = 2, ncol = 3, common.legend = TRUE, legend = "bottom")
+
+final_plot
+ggsave("GO_Enrichment.pdf", plot = final_plot, width = 20, height = 14, dpi = 300)
+```
+
+# Save Go Results
+
+Write GO results to Excel sheets
+
+```{r}
+writeGO2Excel <- function(fileName, goresults, topGOdata, dep_results, FC){
+  upreg <- paste0(">", log2(FC))
+  downreg <- paste0("<-", log2(FC))
+  negStyle <- createStyle(fontColour = "#9C0006", bgFill = "#FFC7CE")
+  posStyle <- createStyle(fontColour = "#006100", bgFill = "#C6EFCE")
+  
+  excel <- createWorkbook()
+
+  addWorksheet(excel, "Summary")
+  writeData(goresults[goresults$raw.p.value < 0.05, ], wb = excel, sheet = "Summary", rowNames = FALSE)
+
+  GoDF <- list()
+  for (x in 1:sum(goresults$raw.p.value < 0.05)) {
+    goID <- goresults[x, "GO.ID"]
+    ids <- genesInTerm(topGOdata, goID)
+    annot <- data.table(AnnotationDbi::select(org.Vvinifera.eg.db, keys=ids[[1]], column=c("symbol", "gene_name"), keytype="gene_id"))
+    tmp <- data.table(dep_results)
+    expVals <- tmp[GENE_GI %in% annot$gene_id, ]
+    final_annot <- merge.data.table(annot, expVals, by.x ="gene_id", by.y = "GENE_GI")
+    setorder(final_annot, Ri6h_vs_Rm6h_p.val)
+    GoDF[[goID]] <- final_annot
+  }
+
+  for (x in 1:sum(goresults$raw.p.value < 0.05)) {
+    goID <- goresults[x, "GO.ID"]
+    sheetname <- substring(goresults[x, "GO.ID"], 4)
+    addWorksheet(excel, sheetname)
+    writeData(GoDF[[x]], wb = excel, sheet = sheetname, rowNames = FALSE)
+    writeFormula(excel, "Summary", startRow = x+1, 
+                 x = makeHyperlinkString(sheet = sheetname, row = 1, col = 1
+                                         , text = goID))
+    conditionalFormatting(excel, sheetname, cols=14, rows=2:(nrow(GoDF[[x]])+1), rule=upreg, style = posStyle)
+    conditionalFormatting(excel, sheetname, cols=14, rows=2:(nrow(GoDF[[x]])+1), rule=downreg, style = posStyle)
+    conditionalFormatting(excel, sheetname, cols=13, rows=2:(nrow(GoDF[[x]])+1), rule=upreg, style = posStyle)
+    conditionalFormatting(excel, sheetname, cols=13, rows=2:(nrow(GoDF[[x]])+1), rule=downreg, style = posStyle)
+    conditionalFormatting(excel, sheetname, cols=6, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
+    conditionalFormatting(excel, sheetname, cols=7, rows=2:(nrow(GoDF[[x]])+1), rule="<0.05", style = posStyle)
+  }
+  
+  saveWorkbook(excel, file = fileName, overwrite = TRUE)
+}
+```
+
+```{r, message=FALSE}
+writeGO2Excel("results/6hpi_GO_BP.xlsx", tab6h_BP, GOdata6h_BP, data_results, 2)
+writeGO2Excel("results/6hpi_GO_MF.xlsx", tab6h_MF, GOdata6h_MF, data_results, 2)
+writeGO2Excel("results/6hpi_GO_CC.xlsx", tab6h_CC, GOdata6h_CC, data_results, 2)
+writeGO2Excel("results/12hpi_GO_BP.xlsx", tab12h_BP, GOdata12h_BP, data_results, 2)
+writeGO2Excel("results/12hpi_GO_MF.xlsx", tab12h_MF, GOdata12h_MF, data_results, 2)
+writeGO2Excel("results/12hpi_GO_CC.xlsx", tab12h_CC, GOdata12h_CC, data_results, 2)
+```
+
+Save timepoints
+
+```{r}
+signif.6hpi <- data_results2[abs(Ri6h_vs_Rm6h_ratio) > 2 & Ri6h_vs_Rm6h_p.val < 0.05,
+              c("PROTEIN_NAME","ID","PROTEIN_ID","Ri6h_vs_Rm6h_p.val","Ri6h_vs_Rm6h_ratio","GENE_GI","name")]
+signif.12hpi <- data_results2[abs(Ri12h_vs_Rm12h_ratio) > 2 & Ri12h_vs_Rm12h_p.val < 0.05,
+              c("PROTEIN_NAME","ID","PROTEIN_ID","Ri12h_vs_Rm12h_p.val","Ri12h_vs_Rm12h_ratio","GENE_GI","name")]
+
+write.csv(signif.6hpi, "significant_6hpi.csv", row.names = F)
+write.csv(signif.12hpi, "significant_12hpi.csv", row.names = F)
+```
+
