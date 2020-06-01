@@ -857,3 +857,12 @@ write.csv(signif.6hpi, "significant_6hpi.csv", row.names = F)
 write.csv(signif.12hpi, "significant_12hpi.csv", row.names = F)
 ```
 
+```{r}
+down.AT <- data_results2[(Ri12h_vs_Rm12h_ratio - Ri6h_vs_Rm6h_ratio) < -2 & Ri6h_vs_Rm6h_p.val < 0.05 & Ri12h_vs_Rm12h_p.val < 0.05,
+              c("PROTEIN_NAME","ID","PROTEIN_ID","Ri6h_vs_Rm6h_p.val","Ri12h_vs_Rm12h_p.val","Ri6h_vs_Rm6h_ratio","Ri12h_vs_Rm12h_ratio","GENE_GI","name")]
+up.AT <- data_results2[(Ri12h_vs_Rm12h_ratio - Ri6h_vs_Rm6h_ratio) > 2 & Ri6h_vs_Rm6h_p.val < 0.05 & Ri12h_vs_Rm12h_p.val < 0.05,
+              c("PROTEIN_NAME","ID","PROTEIN_ID","Ri6h_vs_Rm6h_p.val","Ri12h_vs_Rm12h_p.val","Ri6h_vs_Rm6h_ratio","Ri12h_vs_Rm12h_ratio","GENE_GI","name")]
+write.csv(down.AT, "down_along_time.csv", row.names = F)
+write.csv(up.AT, "up_along_time.csv", row.names = F)
+```
+
