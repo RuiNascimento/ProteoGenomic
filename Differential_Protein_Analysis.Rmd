@@ -866,3 +866,79 @@ write.csv(down.AT, "down_along_time.csv", row.names = F)
 write.csv(up.AT, "up_along_time.csv", row.names = F)
 ```
 
+Write tables for manual curation
+
+```{r}
+diffGO6h_BP <- data.table(reducedTerms6h_BP)[, go]
+
+plot6h_full_BP <- data.table(tab6h_BP)[GO.ID %in% diffGO6h_BP]
+
+plot6h_full_BP[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_BP, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio > 2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_BP, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio < -2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F))]
+
+plot6h_full_BP$Term2 <- sapply(plot6h_full_BP$Term, CapStr, USE.NAMES = F)
+
+BP_6hpi <- merge.data.table(plot6h_full_BP,reducedTerms6h_BP, by.x = "GO.ID", by.y = "go")
+write.csv(BP_6hpi, "BP_6hpi.csv", row.names = FALSE)
+
+
+diffGO6h_MF <- data.table(reducedTerms6h_MF)[, go]
+
+plot6h_full_MF <- data.table(tab6h_MF)[GO.ID %in% diffGO6h_MF]
+
+plot6h_full_MF[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_MF, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio > 2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_MF, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio < -2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F))]
+
+plot6h_full_MF$Term2 <- sapply(plot6h_full_MF$Term, CapStr, USE.NAMES = F)
+
+MF_6hpi <- merge.data.table(plot6h_full_MF,reducedTerms6h_MF, by.x = "GO.ID", by.y = "go")
+write.csv(MF_6hpi, "MF_6hpi.csv", row.names = FALSE)
+
+
+diffGO6h_CC <- data.table(reducedTerms6h_CC)[, go]
+
+plot6h_full_CC <- data.table(tab6h_CC)[GO.ID %in% diffGO6h_CC]
+
+plot6h_full_CC[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_CC, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio > 2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata6h_CC, x)[[1]] & Ri6h_vs_Rm6h_p.val<0.05 & Ri6h_vs_Rm6h_ratio < -2, Ri6h_vs_Rm6h_ratio])}, USE.NAMES = F))]
+
+plot6h_full_CC$Term2 <- sapply(plot6h_full_CC$Term, CapStr, USE.NAMES = F)
+
+CC_6hpi <- merge.data.table(plot6h_full_CC,reducedTerms6h_CC, by.x = "GO.ID", by.y = "go")
+write.csv(CC_6hpi, "CC_6hpi.csv", row.names = FALSE)
+
+
+
+diffGO12h_BP <- data.table(reducedTerms12h_BP)[, go]
+
+plot12h_full_BP <- data.table(tab12h_BP)[GO.ID %in% diffGO12h_BP]
+
+plot12h_full_BP[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_BP, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio > 2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_BP, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio < -2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F))]
+
+plot12h_full_BP$Term2 <- sapply(plot12h_full_BP$Term, CapStr, USE.NAMES = F)
+
+BP_12hpi <- merge.data.table(plot12h_full_BP,reducedTerms12h_BP, by.x = "GO.ID", by.y = "go")
+write.csv(BP_12hpi, "BP_12hpi.csv", row.names = FALSE)
+
+
+diffGO12h_MF <- data.table(reducedTerms12h_MF)[, go]
+
+plot12h_full_MF <- data.table(tab12h_MF)[GO.ID %in% diffGO12h_MF]
+
+plot12h_full_MF[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_MF, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio > 2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_MF, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio < -2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F))]
+
+plot12h_full_MF$Term2 <- sapply(plot12h_full_MF$Term, CapStr, USE.NAMES = F)
+
+MF_12hpi <- merge.data.table(plot12h_full_MF,reducedTerms12h_MF, by.x = "GO.ID", by.y = "go")
+write.csv(MF_12hpi, "MF_12hpi.csv", row.names = FALSE)
+
+
+diffGO12h_CC <- data.table(reducedTerms12h_CC)[, go]
+
+plot12h_full_CC <- data.table(tab12h_CC)[GO.ID %in% diffGO12h_CC]
+
+plot12h_full_CC[,`:=`(Positive = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_CC, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio > 2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F), Negative = sapply(GO.ID, function(x){length(final_results[GENE_GI %in% genesInTerm(object = GOdata12h_CC, x)[[1]] & Ri12h_vs_Rm12h_p.val<0.05 & Ri12h_vs_Rm12h_ratio < -2, Ri12h_vs_Rm12h_ratio])}, USE.NAMES = F))]
+
+plot12h_full_CC$Term2 <- sapply(plot12h_full_CC$Term, CapStr, USE.NAMES = F)
+
+CC_12hpi <- merge.data.table(plot12h_full_CC,reducedTerms12h_CC, by.x = "GO.ID", by.y = "go")
+write.csv(CC_12hpi, "CC_12hpi.csv", row.names = FALSE)
+```
+
